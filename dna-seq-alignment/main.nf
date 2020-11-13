@@ -130,6 +130,7 @@ params.alignedSeqQC = [:]
 params.payloadGenDnaSeqQc = [:]
 params.uploadQc = [:]
 params.gatkCollectOxogMetrics = [:]
+params.fastqc = [:]
 
 
 download_params = [
@@ -216,6 +217,12 @@ gatkCollectOxogMetrics_params = [
     *:(params.gatkCollectOxogMetrics ?: [:])
 ]
 
+fastqc_params = [
+    'cpus': params.cpus,
+    'mem': params.mem,
+    'publish_dir': params.publish_dir,
+    *:(params.fastqc ?: [:])
+]
 
 // Include all modules and pass params
 include { songScoreDownload as dnld } from './song-score-utils/song-score-download' params(download_params)
@@ -231,6 +238,8 @@ include { gatkCollectOxogMetrics as oxog; getOxogSecondaryFiles; gatherOxogMetri
 include { songScoreUpload as upAln } from './song-score-utils/song-score-upload' params(uploadAlignment_params)
 include { songScoreUpload as upQc } from './song-score-utils/song-score-upload' params(uploadQc_params)
 include { cleanupWorkdir as cleanup } from './modules/raw.githubusercontent.com/icgc-argo/nextflow-data-processing-utility-tools/2.3.0/process/cleanup-workdir'
+
+include { fastqc } from './modules/raw.githubusercontent.com/junjun-zhang/demo-nextflow-modules/fastqc.0.1.0/tools/fastqc/fastqc' params(fastqc_params)
 
 
 workflow DnaAln {
@@ -263,6 +272,9 @@ workflow DnaAln {
 
         // perform ubam QC
         rgQC(toLaneBam.out.lane_bams.flatten())
+
+        // perform FastQC on each lane BAM
+        fastqc(toLaneBam.out.lane_bams.flatten())
 
         // use scatter to run BWA alignment for each ubam in parallel
         bwaMemAligner(toLaneBam.out.lane_bams.flatten(), file(ref_genome_fa + '.gz'),
