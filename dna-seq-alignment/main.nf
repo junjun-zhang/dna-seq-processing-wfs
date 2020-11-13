@@ -130,6 +130,7 @@ params.alignedSeqQC = [:]
 params.payloadGenDnaSeqQc = [:]
 params.uploadQc = [:]
 params.gatkCollectOxogMetrics = [:]
+params.fastqc = [:]
 
 
 download_params = [
@@ -216,12 +217,21 @@ gatkCollectOxogMetrics_params = [
     *:(params.gatkCollectOxogMetrics ?: [:])
 ]
 
+fastqc_params = [
+    'cpus': params.cpus,
+    'mem': params.mem,
+    'publish_dir': params.publish_dir,
+    *:(params.fastqc ?: [:])
+]
 
 // Include all modules and pass params
 include { songScoreDownload as dnld } from './song-score-utils/song-score-download' params(download_params)
 include { seqDataToLaneBam as toLaneBam } from "./modules/raw.githubusercontent.com/icgc-argo/dna-seq-processing-tools/seq-data-to-lane-bam.0.3.3.0/tools/seq-data-to-lane-bam/seq-data-to-lane-bam.nf" params(seqDataToLaneBam_params)
 include {bwaMemAligner; getBwaSecondaryFiles} from "./modules/raw.githubusercontent.com/icgc-argo/dna-seq-processing-tools/bwa-mem-aligner.0.1.12.0/tools/bwa-mem-aligner/bwa-mem-aligner.nf" params(bwaMemAligner_params)
+
 include { readGroupUBamQC as rgQC } from "./modules/raw.githubusercontent.com/icgc-argo/data-qc-tools-and-wfs/read-group-ubam-qc.0.1.2.0/tools/read-group-ubam-qc/read-group-ubam-qc.nf" params(readGroupUBamQC_params)
+include { fastqc } from './modules/raw.githubusercontent.com/junjun-zhang/demo-nextflow-modules/fastqc.0.1.0/tools/fastqc/fastqc' params(fastqc_params)
+
 include { bamMergeSortMarkdup as merSorMkdup; getMdupSecondaryFile } from "./modules/raw.githubusercontent.com/icgc-argo/dna-seq-processing-tools/bam-merge-sort-markdup.0.1.11.0/tools/bam-merge-sort-markdup/bam-merge-sort-markdup.nf" params(bamMergeSortMarkdup_params)
 include { alignedSeqQC; getAlignedQCSecondaryFiles } from "./modules/raw.githubusercontent.com/icgc-argo/data-qc-tools-and-wfs/aligned-seq-qc.0.2.2.1/tools/aligned-seq-qc/aligned-seq-qc" params(alignedSeqQC_params)
 include { payloadGenDnaAlignment as pGenDnaAln } from "./modules/raw.githubusercontent.com/icgc-argo/data-processing-utility-tools/payload-gen-dna-alignment.0.3.3.0/tools/payload-gen-dna-alignment/payload-gen-dna-alignment.nf" params(payloadGenDnaAlignment_params)
@@ -231,7 +241,6 @@ include { gatkCollectOxogMetrics as oxog; getOxogSecondaryFiles; gatherOxogMetri
 include { songScoreUpload as upAln } from './song-score-utils/song-score-upload' params(uploadAlignment_params)
 include { songScoreUpload as upQc } from './song-score-utils/song-score-upload' params(uploadQc_params)
 include { cleanupWorkdir as cleanup } from './modules/raw.githubusercontent.com/icgc-argo/nextflow-data-processing-utility-tools/2.3.0/process/cleanup-workdir'
-
 
 workflow DnaAln {
     take:
@@ -263,6 +272,9 @@ workflow DnaAln {
 
         // perform ubam QC
         rgQC(toLaneBam.out.lane_bams.flatten())
+
+        // perform FastQC on each lane BAM
+        fastqc(toLaneBam.out.lane_bams.flatten())
 
         // use scatter to run BWA alignment for each ubam in parallel
         bwaMemAligner(toLaneBam.out.lane_bams.flatten(), file(ref_genome_fa + '.gz'),
